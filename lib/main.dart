@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 void main() => runApp(
-  const MaterialApp(
+  MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'Pencari Kata Bahasa Indonesia',
-    home: WordFinder(),
+    theme: ThemeData(
+      useMaterial3: false,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {TargetPlatform.android: ZoomPageTransitionsBuilder()},
+      ),
+    ),
+    home: const WordFinder(),
   ),
 );
 
@@ -27,16 +34,28 @@ class _WordFinderState extends State<WordFinder> {
     _loadWords();
   }
 
+  // Jalankan di isolate terpisah (off main thread)
+  static List<String> _parseWords(String data) {
+    return data
+        .split('\n')
+        .map((e) => e.trim().toLowerCase())
+        .where((w) => w.length > 1 && !w.contains(RegExp(r'[ \-(]')))
+        .toSet()
+        .toList();
+  }
+
+  static List<String> _filterWords(List<dynamic> args) {
+    final words = args[0] as List<String>;
+    final input = args[1] as String;
+    return words.where((w) => w.startsWith(input)).toList()..sort();
+  }
+
   Future<void> _loadWords() async {
     try {
       final data = await rootBundle.loadString('assets/daftar_kata.txt');
+      final parsed = await compute(_parseWords, data);
       setState(() {
-        _words = data
-            .split('\n')
-            .map((e) => e.trim().toLowerCase())
-            .where((w) => w.length > 1 && !w.contains(RegExp(r'[ \-(]')))
-            .toSet()
-            .toList();
+        _words = parsed;
         _loading = false;
       });
     } catch (e) {
@@ -50,16 +69,18 @@ class _WordFinderState extends State<WordFinder> {
 
   void _search() {
     final input = _controller.text.trim().toLowerCase();
-    setState(() {
-      _results = input.isEmpty
-          ? []
-          : (_words.where((w) => w.startsWith(input)).toList()..sort());
+    if (input.isEmpty) {
+      setState(() => _results = []);
+      return;
+    }
+    compute(_filterWords, [_words, input]).then((result) {
+      if (mounted) setState(() => _results = result);
     });
   }
 
   void _clearAndFocus() {
     _controller.clear();
-    _search(); // ← otomatis reset hasil juga
+    _search();
     _focusNode.unfocus();
     Future.delayed(const Duration(milliseconds: 50), () {
       _focusNode.requestFocus();
@@ -89,7 +110,7 @@ class _WordFinderState extends State<WordFinder> {
                       )
                     : null,
               ),
-              onChanged: (_) => _search(), // ← live search di sini
+              onChanged: (_) => _search(),
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -103,6 +124,8 @@ class _WordFinderState extends State<WordFinder> {
                       ),
                     )
                   : ListView.builder(
+                      addRepaintBoundaries: false,
+                      addAutomaticKeepAlives: false,
                       itemCount: _results.length + 2,
                       itemBuilder: (_, i) {
                         if (i == 0)
@@ -124,7 +147,15 @@ class _WordFinderState extends State<WordFinder> {
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           );
-                        return Text('* ${_results[i - 1]}');
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 4,
+                          ), // ← jarak antar kata
+                          child: Text(
+                            '- ${_results[i - 1]}', // ← strip & ukuran
+                            style: const TextStyle(fontSize: 18),
+                          ),
+                        );
                       },
                     ),
             ),
