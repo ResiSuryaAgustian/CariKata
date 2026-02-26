@@ -19,6 +19,15 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = "cari_kata"
+            keyPassword = "cari_kata123"
+            storeFile = file("cari_kata.jks")
+            storePassword = "cari_kata123"
+        }
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.cari_kata_depan"
@@ -34,6 +43,7 @@ android {
     release {
         isMinifyEnabled = true
         isShrinkResources = true
+        signingConfig = signingConfigs.getByName("release")
         proguardFiles(
             getDefaultProguardFile("proguard-android-optimize.txt"),
             "proguard-rules.pro"
